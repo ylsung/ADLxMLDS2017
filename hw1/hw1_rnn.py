@@ -58,7 +58,7 @@ def make_data(data_root):
 
     assert np.sum(np.char.equal(label_instance_id, train_fbank_id)) == label_instance_id.shape[0], 'the label and data not aligned'
 
-    return (train_fbank_id, train_fbank_feature, train_label, train_fbank_framelength), transformer
+    return [train_fbank_id, train_fbank_feature, train_label, train_fbank_framelength], transformer
 
     # check they are the same
 def k_fold_fn(train_tuple):
@@ -68,7 +68,7 @@ def k_fold_fn(train_tuple):
     # [2] : label
     # [3] : framelength
 
-    kf = KFold(n_splits=5)
+    kf = KFold(n_splits=fold)
     train_list = []
 
     valid_list = []
@@ -79,19 +79,34 @@ def k_fold_fn(train_tuple):
         train_label = train_tuple[2][train_index]
         train_framelength = train_tuple[3][train_index]
 
-        train_list.append((train_id, train_feature, train_label, train_framelength))
+        train_list.append([train_id, train_feature, train_label, train_framelength])
 
         valid_id = train_tuple[0][valid_index]
         valid_feature = train_tuple[1][valid_index]
         valid_label = train_tuple[2][valid_index]
         valid_framelength = train_tuple[3][valid_index]
 
-        valid_list.append((valid_id, valid_feature, valid_label, valid_framelength))
+        valid_list.append([valid_id, valid_feature, valid_label, valid_framelength])
 
     return train_list, valid_list
 
-def normalize(train_data, valid_data):
-    
+def normalize(train_data, train_framelength, valid_data=None, valid_framelength=None):
+    total_size = train_framelength.sum()
+    mean = (train_data).sum(axis=0).sum(axis=0) / float(total_size)
+    E_sum_square = (train_data ** 2 / float(total_size)).sum(axis=0).sum(axis=0)
+    std = (E_sum_square - mean ** 2) ** 0.5
+
+    for i in range(train_data.shape[0]):
+        train_data[i][:train_framelength[i]] = (train_data[i][:train_framelength[i]] - mean) / std
+    if valid_data != None:
+        for i in range(valid_data.shape[0]):
+            valid_data[i][:valid_framelength[i]] = (valid_data[i][:valid_framelength[i]] - mean) / std
+    return train_data, valid_data
+
+# total_size = train_list[0][3].sum()
+# mean = (train_list[0][1] / float(total_size)).sum(axis=0).sum(axis=0)
+# E_sum_square = ((train_list[0][1] / float(total_size) ** 0.5) ** 2).sum(axis=0).sum(axis=0)
+# std = (E_sum_square - mean ** 2) ** 0.5
 def main():
     args = parser()
     print(args)
@@ -99,10 +114,21 @@ def main():
     # load fbank/mfcc data and label
     train_tuple, transformer = make_data(args.data_directory)
     # train, valid tuple format: (id, feature, label, framelength)
-    train_tuple_list, valid_tuple_list = k_fold_fn(train_tuple)
+    # train_tuple is a list
+    if fold != 1:
+        train_list, valid_list = k_fold_fn(train_tuple)
+        for i in range(fold):
+            train_list[i][1], valid_list[i][1] =\
+                normalize(train_list[i][1], train_list[i][3], valid_list[i][1], valid_list[i][3])
+    else:
+        valid_list = None
+        train_list = [train_tuple]
+        train_list[0][1], _ = normalize(train_list[0][1], train_list[0][3])
+        print(train_list[0][1].shape)
     if args.todo == 'valid':
-        train(args, transformer, train_tuple_list, valid_tuple_list)
+        train(args, transformer, train_list, valid_list)
 
 if __name__ == '__main__':
+    fold = 1
     main()
 

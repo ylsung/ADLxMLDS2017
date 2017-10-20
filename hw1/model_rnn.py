@@ -53,17 +53,29 @@ class rnnModel(nn.Module):
         self.feature2label = nn.Linear(hidden_size*direction, num_output)
         self.logsoftmax = nn.LogSoftmax()
 
-        self.optimizer = torch.optim.Adam([self.parameters(), self.h, self.c], lr)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr)
         self.best_state = deepcopy(self.state_dict())
 
+        for m in self.modules():
+            if isinstance(m, nn.LSTM):
+                m.weight_hh_l0.data.normal_(0, 0.01)
+                m.weight_ih_l0.data.normal_(0, 0.01)
+                m.bias_hh_l0.data.zero_()
+                m.bias_ih_l0.data.zero_()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
     def forward(self, inputs):
-        # self.h.fill_(0.0)
-        # self.c.fill_(0.0)
-        h0 = Variable(self.h, require_grad=True)
-        c0 = Variable(self.c, require_grad=True)
+        self.h.fill_(0.0)
+        self.c.fill_(0.0)
+        # self.h.normal_(0, 0.1)
+        # self.c.normal_(0, 0.1)
+        h0 = Variable(self.h)
+        c0 = Variable(self.c)
         output, hn = self.lstm(inputs, (h0, c0))
-        # self.h = hn.data
-        # self.c = cn.data
+        # self.h.copy_(hn[0].data)
+        # self.c.copy_(hn[1].data)
         output = self.feature2label(output)
         output = self.logsoftmax(output)
         return output
@@ -82,24 +94,26 @@ class rnnModel(nn.Module):
                 end_epoch = 1
                 yield _id[-self.batch_size:], _data[-self.batch_size:], _label[-self.batch_size:], _framelength[-self.batch_size:], end_epoch
                 batch_index = 0
-                # shuffle_index = np.arange(_id.shape[0])
-                # random.shuffle(shuffle_index)
-                # _id = _id[shuffle_index]
-                # _data = _data[shuffle_index]
-                # _label = _label[shuffle_index]
-                # _framelength = _framelength[shuffle_index]
+                shuffle_index = np.arange(_id.shape[0])
+                random.shuffle(shuffle_index)
+                _id = _id[shuffle_index]
+                _data = _data[shuffle_index]
+                _label = _label[shuffle_index]
+                _framelength = _framelength[shuffle_index]
 
-    def train_iter(self, output_prob, label, mask):
+    def train_iter(self, output_prob, label, mask, batch_framelength):
         self.zero_grad()
-
+        total_size = float(batch_framelength.sum())
         output_prob = output_prob * mask
 
         output_prob = output_prob.view(-1, self.num_output)
 
         label = label.view(-1)
 
-        loss = self.criterion(output_prob, label)
+        loss = self.criterion_all(output_prob, label) / total_size
         loss.backward()
+        nn.utils.clip_grad_norm(self.parameters(), 5.0)
+
         self.optimizer.step()
         return loss.cpu().data.numpy()[0]
 
@@ -108,14 +122,14 @@ class rnnModel(nn.Module):
         for i in range(len(framelength)):
             mask[i, :framelength[i], :] = 1.0
         return mask
-    def valid_error(self, valid_data, valid_label, valid_mask):
+    def valid_error(self, valid_data, valid_label, valid_mask, valid_framelength):
         # assert valid_data.size(0) % self.batch_size == 0
         if valid_data.size(0) % self.batch_size == 0:
             split_num = valid_data.size(0) // self.batch_size
         else:
             split_num = valid_data.size(0) // self.batch_size + 1
         total_valid_loss = 0.0
-        total_size = 0
+        total_size = float(valid_framelength.sum())
         for i in range(split_num):
             if i == split_num - 1:
                 batch_valid_data = valid_data[-self.batch_size:]
@@ -133,7 +147,7 @@ class rnnModel(nn.Module):
             valid_prob = valid_prob * batch_valid_mask
             valid_prob = valid_prob.view(-1, self.num_output)
             batch_valid_label = batch_valid_label.view(-1)
-            total_size += batch_valid_label.size(0)
+
             valid_loss = self.criterion_all(valid_prob, batch_valid_label)
 
             total_valid_loss += valid_loss.cpu().data.numpy()[0]
@@ -165,7 +179,7 @@ class rnnModel(nn.Module):
             predict_list.append(test_pred)
         self.train()
         return np.vstack(predict_list)
-    def run_epoch(self, data_gen, valid_data_v, valid_label_v, valid_mask_v):
+    def run_epoch(self, data_gen, valid_data_v, valid_label_v, valid_mask_v, valid_framelength):
         end_epoch = 0
         while end_epoch == 0:
             batch_id, batch_data, batch_label, batch_framelength, end_epoch = next(data_gen)
@@ -184,10 +198,10 @@ class rnnModel(nn.Module):
             output_prob = self(batch_data_v)
 
 
-            train_loss = self.train_iter(output_prob, batch_label_v, batch_mask_v)
+            train_loss = self.train_iter(output_prob, batch_label_v, batch_mask_v, batch_framelength)
 
         # validate
-        valid_loss = self.valid_error(valid_data_v, valid_label_v, valid_mask_v)
+        valid_loss = self.valid_error(valid_data_v, valid_label_v, valid_mask_v, valid_framelength)
         return train_loss, valid_loss
     def fit(self, train_tuple):
         # train_tuple's content 
@@ -225,7 +239,7 @@ class rnnModel(nn.Module):
         early_stop = 0
         for i in range(self.epoch):
 
-            train_loss, valid_loss = self.run_epoch(data_gen, valid_data_v, valid_label_v, valid_mask_v)
+            train_loss, valid_loss = self.run_epoch(data_gen, valid_data_v, valid_label_v, valid_mask_v, valid_framelength)
             print('epoch %d, train loss: %.6f, valid loss: %.6f' % (i, train_loss, valid_loss))
             if valid_loss < best_valid_loss:
                 best_valid_loss = valid_loss
