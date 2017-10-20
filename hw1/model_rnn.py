@@ -24,7 +24,7 @@ class rnnModel(nn.Module):
         self.early_stop = params['early_stop']
 
         input_size = feature_size
-        direction = 1
+        direction = 2
         bidirectional = False
         if direction == 1:
             bidirectional = False
@@ -53,14 +53,14 @@ class rnnModel(nn.Module):
         self.feature2label = nn.Linear(hidden_size*direction, num_output)
         self.logsoftmax = nn.LogSoftmax()
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr)
+        self.optimizer = torch.optim.Adam([self.parameters(), self.h, self.c], lr)
         self.best_state = deepcopy(self.state_dict())
 
     def forward(self, inputs):
-        self.h.fill_(0.0)
-        self.c.fill_(0.0)
-        h0 = Variable(self.h)
-        c0 = Variable(self.c)
+        # self.h.fill_(0.0)
+        # self.c.fill_(0.0)
+        h0 = Variable(self.h, require_grad=True)
+        c0 = Variable(self.c, require_grad=True)
         output, hn = self.lstm(inputs, (h0, c0))
         # self.h = hn.data
         # self.c = cn.data
@@ -110,8 +110,12 @@ class rnnModel(nn.Module):
         return mask
     def valid_error(self, valid_data, valid_label, valid_mask):
         # assert valid_data.size(0) % self.batch_size == 0
-        split_num = valid_data.size(0) // self.batch_size + 1
+        if valid_data.size(0) % self.batch_size == 0:
+            split_num = valid_data.size(0) // self.batch_size
+        else:
+            split_num = valid_data.size(0) // self.batch_size + 1
         total_valid_loss = 0.0
+        total_size = 0
         for i in range(split_num):
             if i == split_num - 1:
                 batch_valid_data = valid_data[-self.batch_size:]
@@ -129,10 +133,11 @@ class rnnModel(nn.Module):
             valid_prob = valid_prob * batch_valid_mask
             valid_prob = valid_prob.view(-1, self.num_output)
             batch_valid_label = batch_valid_label.view(-1)
+            total_size += batch_valid_label.size(0)
             valid_loss = self.criterion_all(valid_prob, batch_valid_label)
 
             total_valid_loss += valid_loss.cpu().data.numpy()[0]
-        return total_valid_loss / valid_data.size(0)
+        return total_valid_loss / total_size
     def predict(self, test_data, test_framelength):
         if isinstance(test_data, np.ndarray):
             test_data_t = torch.from_numpy(test_data)
@@ -143,7 +148,10 @@ class rnnModel(nn.Module):
             test_data_v = test_data
         self.eval()
         predict_list = []
-        split_num = test_data_v.size(0) // self.batch_size + 1
+        if test_data_v.size(0) % self.batch_size == 0:
+            split_num = test_data_v.size(0) // self.batch_size
+        else:
+            split_num = test_data_v.size(0) // self.batch_size + 1
         for i in range(split_num):
             if i == split_num - 1:
                 batch_test_data = test_data_v[-self.batch_size:]
@@ -225,6 +233,8 @@ class rnnModel(nn.Module):
                 early_stop = 0
             else:
                 early_stop += 1
+            if early_stop > self.early_stop:
+                break
         if self.save:
             torch.save(self.best_state, 'model_rnn.th')
         self.load_state_dict(self.best_state)

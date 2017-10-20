@@ -90,7 +90,8 @@ def k_fold_fn(train_tuple):
 
     return train_list, valid_list
 
-
+def normalize(train_data, valid_data):
+    
 def main():
     args = parser()
     print(args)
