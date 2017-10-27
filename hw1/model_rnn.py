@@ -51,7 +51,7 @@ class rnnModel(nn.Module):
         self.criterion = nn.NLLLoss()
         self.criterion_all = nn.NLLLoss(size_average=False)
         if self.CUDA:
-            self.h = self.h.cuda(self.gpu)
+            self.h = self.h.cuda()
             # self.criterion = self.criterion.cuda(self.gpu)
 
         # convert lstm output to label
@@ -183,7 +183,7 @@ class rnnModel(nn.Module):
         if isinstance(test_data, np.ndarray):
             test_data_t = torch.from_numpy(test_data)
             if self.CUDA:
-                test_data_t = test_data_t.cuda(self.gpu)
+                test_data_t = test_data_t.cuda()
             test_data_v = Variable(test_data_t, volatile=True)
         elif isinstance(test, Variable):
             test_data_v = test_data
@@ -218,13 +218,13 @@ class rnnModel(nn.Module):
             batch_data_t, batch_label_t = torch.from_numpy(batch_data), torch.from_numpy(batch_label)
 
             if self.CUDA:
-                batch_data_t, batch_label_t = batch_data_t.cuda(self.gpu), batch_label_t.cuda(self.gpu)
+                batch_data_t, batch_label_t = batch_data_t.cuda(), batch_label_t.cuda()
             batch_data_v, batch_label_v = Variable(batch_data_t), Variable(batch_label_t)
 
             batch_mask = self.framelength2mask(batch_data_v, batch_framelength)
 
             if self.CUDA:
-                batch_mask_t = batch_mask.cuda(self.gpu)
+                batch_mask_t = batch_mask.cuda()
             batch_mask_v = Variable(batch_mask_t)
             # output format [batch_size, sequence length, num_output]
             
@@ -258,11 +258,11 @@ class rnnModel(nn.Module):
 
         valid_data_t, valid_label_t = torch.from_numpy(valid_data), torch.from_numpy(valid_label)
         if self.CUDA:
-            valid_data_t, valid_label_t = valid_data_t.cuda(self.gpu), valid_label_t.cuda(self.gpu)
+            valid_data_t, valid_label_t = valid_data_t.cuda(), valid_label_t.cuda()
         valid_data_v, valid_label_v = Variable(valid_data_t, volatile=True), Variable(valid_label_t, volatile=True)
         valid_mask = self.framelength2mask(valid_data_v, valid_framelength)
         if self.CUDA:
-            valid_mask_t = valid_mask.cuda(self.gpu)
+            valid_mask_t = valid_mask.cuda()
         valid_mask_v = Variable(valid_mask_t, volatile=True)
 
         data_gen = self.batch_data_gen(train_id, train_data, train_label, train_framelength)
@@ -332,7 +332,7 @@ if __name__ == '__main__':
     }
     print(torch.cuda.is_available())
     model = rnnModel(params)
-    model.cuda(gpu)
+    model.cuda()
     print(model)
     model.fit(train_tuple)
     pred = model.predict(_feature, _framelength)

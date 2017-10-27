@@ -1,6 +1,6 @@
 from model_rnn import rnnModel
 from model_dnn import dnnModel
-from model_lstm import lstmModel
+from model_best import lstmModel
 from model_rnn_cnn import rnn_cnnModel
 
 import torch
@@ -202,7 +202,7 @@ def train(args, transformer, train_tuple_list, valid_tuple_list, transition_matr
             model = lstmModel(params)
 
         if CUDA:
-            model.cuda(args.gpu)
+            model.cuda()
         print(model)
         if args.load_folder == '':
             model.fit(train_tuple_list[i])
@@ -255,7 +255,7 @@ def test(args, transformer, test_tuple_list):
             model = lstmModel(params)
 
         if CUDA:
-            model.cuda(args.gpu)
+            model.cuda()
         print(model)
         if args.load_folder != '':
             model_name = os.path.join('model', args.load_folder, 'model_%d.th' % i)
