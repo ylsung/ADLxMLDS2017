@@ -5,9 +5,9 @@ import torch.nn as nn
 from copy import deepcopy
 from torch.autograd import Variable
 
-class rnnModel(nn.Module):
+class lstmModel(nn.Module):
     def __init__(self, params):
-        super(rnnModel, self).__init__()
+        super(lstmModel, self).__init__()
 
         # declare parameters
         self.save = params['save']
@@ -26,7 +26,6 @@ class rnnModel(nn.Module):
         if self.gpu == None:
             self.gpu = 0
 
-        input_size = feature_size
         direction = 2
         bidirectional = False
         if direction == 1:
@@ -35,23 +34,22 @@ class rnnModel(nn.Module):
             bidirectional = True
 
         # declare model structure    
-        # one direction lstm
-        self.tanh = nn.Tanh()
-        self.rnn = nn.RNN(
+        input_size = feature_size
+        self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
-            nonlinearity='relu',
-            dropout=0.0,
+            dropout=0.5,
             bidirectional = bidirectional
             )
         self.h = torch.FloatTensor(num_layers*direction, self.batch_size, hidden_size).fill_(0.0)
-
+        self.c = torch.FloatTensor(num_layers*direction, self.batch_size, hidden_size).fill_(0.0)
         self.criterion = nn.NLLLoss()
         self.criterion_all = nn.NLLLoss(size_average=False)
         if self.CUDA:
             self.h = self.h.cuda(self.gpu)
+            self.c = self.c.cuda(self.gpu)
             # self.criterion = self.criterion.cuda(self.gpu)
 
         # convert lstm output to label
@@ -62,7 +60,7 @@ class rnnModel(nn.Module):
         self.best_state = deepcopy(self.state_dict())
 
         for m in self.modules():
-            if isinstance(m, nn.LSTM) or isinstance(m, nn.RNN):
+            if isinstance(m, nn.LSTM):
                 m.weight_hh_l0.data.normal_(0, 0.01)
                 m.weight_ih_l0.data.normal_(0, 0.01)
                 m.bias_hh_l0.data.normal_(0, 0.01)
@@ -79,12 +77,12 @@ class rnnModel(nn.Module):
 
     def forward(self, inputs):
         self.h.fill_(0.0)
-
+        self.c.fill_(0.0)
         # self.h.normal_(0, 0.1)
         # self.c.normal_(0, 0.1)
         h0 = Variable(self.h)
-
-        output, hn = self.rnn(inputs, h0)
+        c0 = Variable(self.c)
+        output, hn = self.lstm(inputs, (h0, c0))
         # self.h.copy_(hn[0].data)
         # self.c.copy_(hn[1].data)
         output = self.feature2label(output)
@@ -129,9 +127,23 @@ class rnnModel(nn.Module):
         output_prob = output_prob * mask
 
         output_prob = output_prob[overlap:]
+        label = label[overlap:]
+
+        #######
+        # output_prob_2 = output_prob[:, 1:, :]
+        # total_size_2 = float((batch_framelength - 1.0).sum())
+        # label_2 = label[:, :-1]
+        # output_prob_2 = output_prob_2.contiguous().view(-1, self.num_output)
+        
+        # label_2 = label_2.contiguous().view(-1)
+        # loss_2 = self.criterion_all(output_prob_2, label_2)
+        # loss_2 = loss_2 / total_size_2
+        # loss_2.backward(retain_graph=True)
+
+        #######
+
         output_prob = output_prob.view(-1, self.num_output)
         
-        label = label[overlap:]
         label = label.view(-1)
 
         loss = self.criterion_all(output_prob, label)
@@ -139,7 +151,7 @@ class rnnModel(nn.Module):
         loss = loss / total_size
 
         loss.backward()
-        nn.utils.clip_grad_norm(self.parameters(), 1.0)
+        # nn.utils.clip_grad_norm(self.parameters(), 5.0)
 
         self.optimizer.step()
         return loss.cpu().data.numpy()[0]

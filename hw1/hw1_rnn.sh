@@ -1,1 +1,1 @@
-python hw1_rnn.py --data_directory 'data/' --cuda --batch_size 64 --epoch 100 
+python hw1_rnn.py --todo valid --data_directory 'data/' --cuda --batch_size 256 --epoch 100 --model 'rnn_cnn' --gpu 2 --save_folder 'rn_cnn_batch_256_fbank_hidden64_layer3_gradclip' --save

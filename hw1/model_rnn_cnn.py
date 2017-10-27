@@ -5,9 +5,9 @@ import torch.nn as nn
 from copy import deepcopy
 from torch.autograd import Variable
 
-class rnnModel(nn.Module):
+class rnn_cnnModel(nn.Module):
     def __init__(self, params):
-        super(rnnModel, self).__init__()
+        super(rnn_cnnModel, self).__init__()
 
         # declare parameters
         self.save = params['save']
@@ -22,11 +22,24 @@ class rnnModel(nn.Module):
         self.valid_tuple = params.get('valid')
         self.epoch = params['epoch']
         self.early_stop = params['early_stop']
-        self.gpu = params.get('gpu')
-        if self.gpu == None:
-            self.gpu = 0
+        self.gpu = params['gpu']
 
-        input_size = feature_size
+        i_c = 1
+        m_c = 16
+        self.m_c = m_c
+        self.conv = nn.Sequential(
+            nn.Conv2d(i_c, m_c, kernel_size=(3, 5), stride=(1, 2), padding=(1, 2)),
+            # nn.MaxPool2d((1, 2)),
+            # nn.SELU(),
+            nn.ReLU(True),
+            nn.BatchNorm2d(m_c),
+            nn.Dropout2d(),
+            nn.Conv2d(m_c, m_c, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1)),
+            # nn.MaxPool2d((1, 2)),
+            # nn.BatchNorm2d(m_c * 2),
+            )
+        import math
+        input_size = m_c * math.ceil(feature_size / 4)
         direction = 2
         bidirectional = False
         if direction == 1:
@@ -36,7 +49,6 @@ class rnnModel(nn.Module):
 
         # declare model structure    
         # one direction lstm
-        self.tanh = nn.Tanh()
         self.rnn = nn.RNN(
             input_size=input_size,
             hidden_size=hidden_size,
@@ -47,22 +59,39 @@ class rnnModel(nn.Module):
             bidirectional = bidirectional
             )
         self.h = torch.FloatTensor(num_layers*direction, self.batch_size, hidden_size).fill_(0.0)
-
+        # self.c = torch.FloatTensor(num_layers*direction, self.batch_size, hidden_size).fill_(0.0)
         self.criterion = nn.NLLLoss()
         self.criterion_all = nn.NLLLoss(size_average=False)
         if self.CUDA:
             self.h = self.h.cuda(self.gpu)
+            # self.c = self.c.cuda(self.gpu)
             # self.criterion = self.criterion.cuda(self.gpu)
 
+        # self.out_conv = nn.Sequential(
+        #     nn.Conv2d(i_c, m_c, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0)),
+        #     # nn.MaxPool2d((1, 2)),
+        #     nn.BatchNorm2d(m_c),
+        #     nn.ReLU(True),
+        #     # nn.Dropout2d(),
+        #     nn.Conv2d(m_c, m_c * 2, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0)),
+        #     # nn.MaxPool2d((1, 2)),
+        #     nn.BatchNorm2d(m_c * 2),
+        #     nn.ReLU(True),
+        #     # nn.ReLU(True),
+        #     # nn.Dropout2d(),
+        #     )
         # convert lstm output to label
-        self.feature2label = nn.Linear(hidden_size*direction, num_output)
+        dim = 512
+        self.feature2label = nn.Sequential(
+            nn.Linear((hidden_size*direction) , num_output),
+            )
         self.logsoftmax = nn.LogSoftmax()
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr)
         self.best_state = deepcopy(self.state_dict())
 
         for m in self.modules():
-            if isinstance(m, nn.LSTM) or isinstance(m, nn.RNN):
+            if isinstance(m, nn.LSTM):
                 m.weight_hh_l0.data.normal_(0, 0.01)
                 m.weight_ih_l0.data.normal_(0, 0.01)
                 m.bias_hh_l0.data.normal_(0, 0.01)
@@ -76,17 +105,30 @@ class rnnModel(nn.Module):
             elif isinstance(m, nn.Conv2d):
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.normal_(0, 0.01)
+    def normalize(self, inputs):
+        _max = inputs.max(0)[0].max(0)[0]
+        _min = inputs.min(0)[0].min(0)[0]
 
+        _middle = (_max + _min) / 2.0
+        _range = (_max - _min) / 2.0 + 1e-10
+
+        return (inputs - _middle) / _range
     def forward(self, inputs):
-        self.h.fill_(0.0)
 
+        output = self.conv(inputs.view(inputs.size(0), 1, inputs.size(1), inputs.size(2)))
+        output = output.permute(0, 2, 1, 3).contiguous().view(inputs.size(0), inputs.size(1), -1)
+        self.h.fill_(0.0)
+        # self.c.fill_(0.0)
         # self.h.normal_(0, 0.1)
         # self.c.normal_(0, 0.1)
         h0 = Variable(self.h)
-
-        output, hn = self.rnn(inputs, h0)
+        # c0 = Variable(self.c)
+        # output = self.normalize(output)
+        output, hn = self.rnn(output, h0)
         # self.h.copy_(hn[0].data)
         # self.c.copy_(hn[1].data)
+        # output = self.out_conv(output.contiguous().view(inputs.size(0), 1, inputs.size(1), -1))
+        # output = output.permute(0, 2, 1, 3).contiguous().view(inputs.size(0), inputs.size(1), -1)
         output = self.feature2label(output)
         output = self.logsoftmax(output.view(-1, output.size(-1)))
         return output.view(inputs.size(0), -1, output.size(-1))
@@ -121,25 +163,20 @@ class rnnModel(nn.Module):
         self.zero_grad()
 
         batch_framelength = batch_framelength[overlap:]
- 
 
         total_size = float(batch_framelength.sum())
         output_prob = self(data)
- 
         output_prob = output_prob * mask
-
         output_prob = output_prob[overlap:]
         output_prob = output_prob.view(-1, self.num_output)
-        
         label = label[overlap:]
         label = label.view(-1)
 
-        loss = self.criterion_all(output_prob, label)
-
-        loss = loss / total_size
-
+        loss = self.criterion_all(output_prob, label) / total_size
         loss.backward()
-        nn.utils.clip_grad_norm(self.parameters(), 1.0)
+        # nn.utils.clip_grad_norm(self.parameters(), 1.0)
+        for p in self.parameters():
+            p.grad.data.clamp_(max=1.0, min=-1.0)
 
         self.optimizer.step()
         return loss.cpu().data.numpy()[0]
@@ -157,6 +194,7 @@ class rnnModel(nn.Module):
             split_num = valid_data.size(0) // self.batch_size + 1
         total_valid_loss = 0.0
         total_size = float(valid_framelength.sum())
+        self.eval()
         for i in range(split_num):
             if i == split_num - 1:
                 batch_valid_data = valid_data[-self.batch_size:]
@@ -178,6 +216,7 @@ class rnnModel(nn.Module):
             valid_loss = self.criterion_all(valid_prob, batch_valid_label)
 
             total_valid_loss += valid_loss.cpu().data.numpy()[0]
+        self.train()
         return total_valid_loss / total_size
     def predict(self, test_data, test_framelength):
         if isinstance(test_data, np.ndarray):
@@ -203,12 +242,10 @@ class rnnModel(nn.Module):
                 batch_test_data = test_data_v[i * self.batch_size: (i + 1) * self.batch_size]
                 test_prob = self(batch_test_data)
             _, test_pred = torch.max(test_prob, dim=2)
-
-            test_prob = test_prob.cpu().data.numpy()
             test_pred = test_pred.cpu().data.numpy()
-
-            prob_list.append(test_prob)
+            test_prob = test_prob.cpu().data.numpy()
             predict_list.append(test_pred)
+            prob_list.append(test_prob)
         self.train()
         return np.vstack(predict_list), np.vstack(prob_list)
     def run_epoch(self, data_gen, valid_data_v, valid_label_v, valid_mask_v, valid_framelength):
@@ -302,21 +339,19 @@ if __name__ == '__main__':
     hidden_size = 10
     num_layers = 2
     num_output = 7
-    total_size = 7
-    max_length = 9
+    total_size = 6
 
-    _framelength = np.asarray(random.sample(range(1, max_length + 1), total_size))
+    _framelength = np.asarray(random.sample(range(1, 10), total_size))
     _id = np.arange(total_size)
-    _feature = np.random.randn(total_size, max_length, 4).astype(np.float32)
+    _feature = np.random.randn(total_size, 9, 4).astype(np.float32)
     for i in range(len(_framelength)):
         _feature[i, _framelength[i]:, :] = 0.0
-    _label = np.zeros(shape=(total_size, max_length), dtype=int)
+    _label = np.zeros(shape=(total_size, 9), dtype=int)
     for i in range(len(_framelength)):
-        _label[i, :_framelength[i]] = i
+        _label[i, :_framelength[i]] = 5 - i
     print(_framelength)
     print_result(_label, _framelength)
     train_tuple = (_id, _feature, _label, _framelength)
-    gpu = 0
     params={
         'feature_size': feature_size,
         'hidden_size': hidden_size,
@@ -325,18 +360,15 @@ if __name__ == '__main__':
         'CUDA': 1,
         'lr': 0.01,
         'save': 1,
-        'batch_size': 2,
-        'epoch': 100,
-        'early_stop': 5,
-        'gpu': gpu
+        'batch_size': 4,
+        'epoch': 50,
+        'early_stop': 3
     }
     print(torch.cuda.is_available())
     model = rnnModel(params)
-    model.cuda(gpu)
+    model.cuda()
     print(model)
     model.fit(train_tuple)
     pred = model.predict(_feature, _framelength)
-    print(pred)
     # print(pred.shape)
     print(print_result(pred, _framelength))
-    
