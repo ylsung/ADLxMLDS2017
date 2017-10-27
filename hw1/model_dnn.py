@@ -1,14 +1,13 @@
 import numpy as np
 import random
-import math
 import torch
 import torch.nn as nn
 from copy import deepcopy
 from torch.autograd import Variable
 
-class rnn_cnnModel(nn.Module):
+class dnnModel(nn.Module):
     def __init__(self, params):
-        super(rnn_cnnModel, self).__init__()
+        super(dnnModel, self).__init__()
 
         # declare parameters
         self.save = params['save']
@@ -23,112 +22,81 @@ class rnn_cnnModel(nn.Module):
         self.valid_tuple = params.get('valid')
         self.epoch = params['epoch']
         self.early_stop = params['early_stop']
-        self.gpu = params['gpu']
+        self.gpu = params.get('gpu')
+        if self.gpu == None:
+            self.gpu = 0
+
+        input_size = feature_size
+
+        self.criterion = nn.NLLLoss()
+        self.criterion_all = nn.NLLLoss(size_average=False)
+        if self.CUDA:
+
+            self.criterion = self.criterion.cuda()
+
+        # convert lstm output to label
+        dim = 512
 
         i_c = 1
         m_c = 16
         self.m_c = m_c
         self.conv = nn.Sequential(
-            nn.Conv2d(i_c, m_c, kernel_size=(3, 5), stride=(1, 2), padding=(1, 2)),
-            # nn.MaxPool2d((1, 2)),
-            # nn.SELU(),
-            nn.ReLU(True),
+            nn.Conv2d(i_c, m_c, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
+            nn.MaxPool2d((1, 2)),
             nn.BatchNorm2d(m_c),
-            nn.Dropout2d(),
-            nn.Conv2d(m_c, m_c, kernel_size=(1, 3), stride=(1, 2), padding=(0, 1)),
-            # nn.MaxPool2d((1, 2)),
-            # nn.BatchNorm2d(m_c * 2),
+            nn.ReLU(True),
+            nn.Conv2d(m_c, m_c * 2, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.MaxPool2d((1, 2)),
+            nn.BatchNorm2d(m_c * 2),
+            nn.ReLU(True),
+            nn.Conv2d(m_c * 2, m_c * 4, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.MaxPool2d((1, 2)),
+            nn.BatchNorm2d(m_c * 4),
+            nn.ReLU(True),
             )
-        input_size = m_c * math.ceil(feature_size / 4)
-        direction = 2
-        bidirectional = False
-        if direction == 1:
-            bidirectional = False
-        elif direction == 2:
-            bidirectional = True
-
-        # declare model structure    
-        # one direction lstm
-        self.rnn = nn.RNN(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            nonlinearity='relu',
-            dropout=0.0,
-            bidirectional = bidirectional
-            )
-        self.h = torch.FloatTensor(num_layers*direction, self.batch_size, hidden_size).fill_(0.0)
-        # self.c = torch.FloatTensor(num_layers*direction, self.batch_size, hidden_size).fill_(0.0)
-        self.criterion = nn.NLLLoss()
-        self.criterion_all = nn.NLLLoss(size_average=False)
-        if self.CUDA:
-            self.h = self.h.cuda()
-            # self.c = self.c.cuda(self.gpu)
-            # self.criterion = self.criterion.cuda(self.gpu)
-
-        # self.out_conv = nn.Sequential(
-        #     nn.Conv2d(i_c, m_c, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0)),
-        #     # nn.MaxPool2d((1, 2)),
-        #     nn.BatchNorm2d(m_c),
-        #     nn.ReLU(True),
-        #     # nn.Dropout2d(),
-        #     nn.Conv2d(m_c, m_c * 2, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0)),
-        #     # nn.MaxPool2d((1, 2)),
-        #     nn.BatchNorm2d(m_c * 2),
-        #     nn.ReLU(True),
-        #     # nn.ReLU(True),
-        #     # nn.Dropout2d(),
-        #     )
-        # convert lstm output to label
-        dim = 512
         self.feature2label = nn.Sequential(
-            nn.Linear((hidden_size*direction) , num_output),
+            nn.Linear(m_c * 4 * (input_size // 8), dim), 
+            nn.BatchNorm1d(777),
+            nn.ReLU(True),
+            nn.Linear(dim, dim), 
+            nn.BatchNorm1d(777),
+            nn.ReLU(True),
+            nn.Linear(dim, dim), 
+            nn.BatchNorm1d(777),
+            nn.ReLU(True),
+            nn.Linear(dim, num_output)
             )
         self.logsoftmax = nn.LogSoftmax()
 
         self.optimizer = torch.optim.Adam(self.parameters(), lr)
         self.best_state = deepcopy(self.state_dict())
 
-        for m in self.modules():
-            if isinstance(m, nn.LSTM):
-                m.weight_hh_l0.data.normal_(0, 0.01)
-                m.weight_ih_l0.data.normal_(0, 0.01)
-                m.bias_hh_l0.data.normal_(0, 0.01)
-                m.bias_ih_l0.data.normal_(0, 0.01)
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.normal_(0, 0.01)
-                m.bias.data.normal_(0, 0.01)
-            elif isinstance(m, nn.Linear):
-                m.weight.data.normal_(0, 0.01)
-                m.bias.data.normal_(0, 0.01)
-            elif isinstance(m, nn.Conv2d):
-                m.weight.data.normal_(0, 0.01)
-                m.bias.data.normal_(0, 0.01)
-    def normalize(self, inputs):
-        _max = inputs.max(0)[0].max(0)[0]
-        _min = inputs.min(0)[0].min(0)[0]
+        # for m in self.modules():
+        #     if isinstance(m, nn.LSTM):
+        #         m.weight_hh_l0.data.normal_(0, (2./ self.batch_size) ** 0.5)
+        #         m.weight_ih_l0.data.normal_(0, (2./ self.batch_size) ** 0.5)
+        #         m.bias_hh_l0.data.zero_()
+        #         m.bias_ih_l0.data.zero_()
+        #     elif isinstance(m, nn.BatchNorm2d):
+        #         m.weight.data.fill_(1)
+        #         m.bias.data.zero_()
+        #     elif isinstance(m, nn.Linear):
+        #         m.weight.data.normal_(0, (2./ self.batch_size) ** 0.5)
+        #         m.bias.data.normal_(0, (2./ self.batch_size) ** 0.5)
+        #     elif isinstance(m, nn.Conv2d):
+        #         m.weight.data.normal_(0, (2./ self.batch_size) ** 0.5)
+        #         m.bias.data.normal_(0, (2./ self.batch_size) ** 0.5)
 
-        _middle = (_max + _min) / 2.0
-        _range = (_max - _min) / 2.0 + 1e-10
-
-        return (inputs - _middle) / _range
     def forward(self, inputs):
-
-        output = self.conv(inputs.view(inputs.size(0), 1, inputs.size(1), inputs.size(2)))
-        output = output.permute(0, 2, 1, 3).contiguous().view(inputs.size(0), inputs.size(1), -1)
-        self.h.fill_(0.0)
-        # self.c.fill_(0.0)
-        # self.h.normal_(0, 0.1)
-        # self.c.normal_(0, 0.1)
-        h0 = Variable(self.h)
-        # c0 = Variable(self.c)
-        # output = self.normalize(output)
-        output, hn = self.rnn(output, h0)
         # self.h.copy_(hn[0].data)
         # self.c.copy_(hn[1].data)
-        # output = self.out_conv(output.contiguous().view(inputs.size(0), 1, inputs.size(1), -1))
-        # output = output.permute(0, 2, 1, 3).contiguous().view(inputs.size(0), inputs.size(1), -1)
+
+        output = self.conv(inputs.view(inputs.size(0), 1, inputs.size(1), inputs.size(2)))
+        # print(output.size())
+        output = output.permute(0, 2, 1, 3).contiguous()
+        output = output.view(inputs.size(0), inputs.size(1), -1)
+        # print(output.size())
+
         output = self.feature2label(output)
         output = self.logsoftmax(output.view(-1, output.size(-1)))
         return output.view(inputs.size(0), -1, output.size(-1))
@@ -174,9 +142,7 @@ class rnn_cnnModel(nn.Module):
 
         loss = self.criterion_all(output_prob, label) / total_size
         loss.backward()
-        # nn.utils.clip_grad_norm(self.parameters(), 1.0)
-        for p in self.parameters():
-            p.grad.data.clamp_(max=1.0, min=-1.0)
+        # nn.utils.clip_grad_norm(self.parameters(), 5.0)
 
         self.optimizer.step()
         return loss.cpu().data.numpy()[0]
@@ -194,7 +160,6 @@ class rnn_cnnModel(nn.Module):
             split_num = valid_data.size(0) // self.batch_size + 1
         total_valid_loss = 0.0
         total_size = float(valid_framelength.sum())
-        self.eval()
         for i in range(split_num):
             if i == split_num - 1:
                 batch_valid_data = valid_data[-self.batch_size:]
@@ -216,7 +181,6 @@ class rnn_cnnModel(nn.Module):
             valid_loss = self.criterion_all(valid_prob, batch_valid_label)
 
             total_valid_loss += valid_loss.cpu().data.numpy()[0]
-        self.train()
         return total_valid_loss / total_size
     def predict(self, test_data, test_framelength):
         if isinstance(test_data, np.ndarray):
@@ -227,7 +191,6 @@ class rnn_cnnModel(nn.Module):
         elif isinstance(test, Variable):
             test_data_v = test_data
         self.eval()
-        prob_list = []
         predict_list = []
         if test_data_v.size(0) % self.batch_size == 0:
             split_num = test_data_v.size(0) // self.batch_size
@@ -243,11 +206,9 @@ class rnn_cnnModel(nn.Module):
                 test_prob = self(batch_test_data)
             _, test_pred = torch.max(test_prob, dim=2)
             test_pred = test_pred.cpu().data.numpy()
-            test_prob = test_prob.cpu().data.numpy()
             predict_list.append(test_pred)
-            prob_list.append(test_prob)
         self.train()
-        return np.vstack(predict_list), np.vstack(prob_list)
+        return np.vstack(predict_list)
     def run_epoch(self, data_gen, valid_data_v, valid_label_v, valid_mask_v, valid_framelength):
         end_epoch = 0
         while end_epoch == 0:
@@ -372,3 +333,4 @@ if __name__ == '__main__':
     pred = model.predict(_feature, _framelength)
     # print(pred.shape)
     print(print_result(pred, _framelength))
+    

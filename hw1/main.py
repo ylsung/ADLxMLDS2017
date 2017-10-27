@@ -20,7 +20,7 @@ def parser():
     parser.add_argument('--save', action='store_true', help='save the parameter')
     parser.add_argument('--save_folder', default='test')
     parser.add_argument('--load_folder', default='', help='load the parameter')
-    parser.add_argument('--write_file', default='output/prediction.csv', help='write to the directory')
+    parser.add_argument('--write_file', default='prediction.csv', help='write to the directory')
     return parser.parse_args()
 
 def make_data(data_root, dtype):
@@ -170,14 +170,8 @@ def normalize_2(train_data, train_framelength, valid_data=[], valid_framelength=
     train_data[~mask] = 1000
     _min = train_data.min(axis=0).min(axis=0)
     train_data[~mask] = 0.0
-    # print('------------------max---------------------')
-    # print(_max)
-    # print(_min)
     _middle = (_max + _min) / 2.0
     _range = (_max - _min) / 2.0 + 1e-12
-    # print('------------------middle---------------------')
-    # print(_middle)
-    # print(_range)
 
     for i in range(train_data.shape[0]):
         train_data[i][:train_framelength[i]] = (train_data[i][:train_framelength[i]] - _middle) / (_range)
@@ -191,11 +185,6 @@ def framelength2mask(data, framelength):
     for i in range(len(framelength)):
         mask[i, :framelength[i], :] = 1.0
     return mask
-
-# total_size = train_list[0][3].sum()
-# mean = (train_list[0][1] / float(total_size)).sum(axis=0).sum(axis=0)
-# E_sum_square = ((train_list[0][1] / float(total_size) ** 0.5) ** 2).sum(axis=0).sum(axis=0)
-# std = (E_sum_square - mean ** 2) ** 0.5
 
 def combine_around_data(data):
     before = np.zeros(shape=data.shape, dtype=np.float32)
