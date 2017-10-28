@@ -14,6 +14,8 @@ OS == Ubuntu (Linux system)
 
 ## **Execution**
 
+### **testing**
+
 if you only have the authority of read, execute program by using commands below:
 
 `bash hw1_rnn.sh [directory of data] [path for outfile (csv file)]`
@@ -27,6 +29,14 @@ ex: `bash hw1_best.sh ~/hw1/data ~/output/prediction.csv`
 if you want to execute like: <br/>
 `./hw1_rnn.sh [directory of data] [path for outfile (csv file)]` <br/>
 you might have to get the authority of execution
+
+### **training**
+
+train rnn model<br/>
+
+`python main.py --todo valid --data_directory [directory of data] --cuda --batch_size 256 --epoch 100 --model 'rnn' --save_folder 'rnn'`
+
+if wanting to train other model, just changing model type to cnn/lstm (lstm is my best model), and change the save_folder to cnn/best. <br/>
 
 ## **Author**
 
