@@ -30,7 +30,7 @@ def remove_middle(string):
 def smooth(string):
     string = list(string)
     new_string = ''
-    window = 9
+    window = 7
     half_window = window // 2
     for i in range(len(string)):
         left = i - half_window if i >= half_window else 0
@@ -101,7 +101,7 @@ def minEditDist(sm,sn):
     # print(D)
     for i in range(1, m + 1):
       for j in range(1, n + 1):
-        D[i][j] = min(D[i - 1][j] + 1, D[i][j - 1] + 1, D[i - 1][j - 1] + (0 if sm[i - 1] == sn[j - 1] else 2))
+        D[i][j] = min(D[i - 1][j] + 1, D[i][j - 1] + 1, D[i - 1][j - 1] + (0 if sm[i - 1] == sn[j - 1] else 1))
     # for i in range(0,m+1):
     #   print(D[i]) 
     return D[m][n]
