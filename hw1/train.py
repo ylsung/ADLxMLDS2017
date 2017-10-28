@@ -1,7 +1,7 @@
 from model_rnn import rnnModel
 from model_dnn import dnnModel
 from model_best import lstmModel
-from model_rnn_cnn import rnn_cnnModel
+from model_cnn import rnn_cnnModel
 
 import torch
 from time import time
