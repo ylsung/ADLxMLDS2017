@@ -175,6 +175,8 @@ def train(args, transformer, train_tuple_list, valid_tuple_list, transition_matr
     torch.manual_seed(int(time()))
 
     # train the model
+    edit_train = []
+    edit_valid = []
     for i in range(len(train_tuple_list)):
         params={
             'feature_size': feature_size,
@@ -211,13 +213,17 @@ def train(args, transformer, train_tuple_list, valid_tuple_list, transition_matr
             model.load_state_dict(torch.load(model_name))
 
         print('fold: %d' % i)
-        print('train_edit_distance: ', avgEditDist(model, train_tuple_list[i], transformer))
+        edit_train.append(avgEditDist(model, train_tuple_list[i], transformer))
+        edit_valid.append(avgEditDist(model, valid_tuple_list[i], transformer))
+        print('train_edit_distance: ', edit_train[i])
 
-        print('valid_edit_distance: ', avgEditDist(model, valid_tuple_list[i], transformer))
+        print('valid_edit_distance: ', edit_valid[i])
 
         if args.save:
             model_name = os.path.join('model', args.save_folder, 'model_%d.th' % i)
             torch.save(model.state_dict(), model_name)
+    print('avg train_edit_distance: ', np.mean(edit_train))
+    print('avg valid_edit_distance: ', np.mean(edit_valid))
 
 def test(args, transformer, test_tuple_list):
     feature_size = test_tuple_list[0][1].shape[2]
