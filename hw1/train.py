@@ -260,12 +260,13 @@ def test(args, transformer, test_tuple_list):
         elif args.model == 'lstm':
             model = lstmModel(params)
 
+        if args.load_folder != '':
+            model_name = os.path.join('model', args.load_folder, 'model_%d.th' % i)
+            
+            model.load_state_dict(torch.load(model_name, map_location=lambda storage, loc: storage))
         if CUDA:
             model.cuda()
         print(model)
-        if args.load_folder != '':
-            model_name = os.path.join('model', args.load_folder, 'model_%d.th' % i)
-            model.load_state_dict(torch.load(model_name))
 
         _, test_prob = model.predict(test_tuple_list[i][1], test_tuple_list[i][2])
         final_prob = final_prob + test_prob
