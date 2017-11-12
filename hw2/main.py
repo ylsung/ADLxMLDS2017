@@ -120,14 +120,13 @@ def load_test_data(directory):
     return np.stack(data_list), name_array
 def load_special_data(directory):
     feat_directory = os.path.join(directory, 'testing_data/feat')
-    name_directory = os.path.join(directory, 'special_id.txt')
 
-    name_array = np.loadtxt(name_directory, dtype=str)
+    name_array = ['klteYv1Uv9A_27_33.avi', '5YJaS2Eswg0_22_26.avi', 'UbmZAe5u5FI_132_141.avi', 'JntMAcTlOF0_50_70.avi', 'tJHUH9tpqPg_113_118.avi']
     data_list = []
     for name_avi in name_array:
         name_avi += '.npy'
         data_list.append(np.load(os.path.join(feat_directory, name_avi)))
-    return np.stack(data_list), name_array
+    return np.stack(data_list), np.asarray(name_array)
 def mean_std(data):
     # return mean and std of each feature 
     E_sum = data.sum(0).sum(0) / (data.shape[0] * data.shape[1])
