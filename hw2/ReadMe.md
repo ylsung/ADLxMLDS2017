@@ -15,13 +15,13 @@ OS == Ubuntu (Linux system)
 
 ### **testing**
 
-`hw2_seq2seq.sh [data directory] [test output] [peer output]`
-ex: <br/>
+`hw2_seq2seq.sh [data directory] [test output] [peer output]` <br/>
+ex: 
 `hw2_seq2seq.sh 'data' 'test.txt' 'peer.txt'`
 
 ### **training**
 
-train rnn model<br/>
+train seq2seq model<br/>
 
 `python main.py --todo 'train' --model 'seq2seq' --data [data directory] --save [where to save model]`
 
