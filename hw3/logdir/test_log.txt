@@ -1,0 +1,10 @@
+Restoring parameters from ./logdir/model.ckpt
+Restored from ./logdir/model.ckpt
+Restoring parameters from ./logdir/model.ckpt
+Restored from ./logdir/model.ckpt
+Restoring parameters from ./logdir/model.ckpt
+Restored from ./logdir/model.ckpt
+Restoring parameters from ./logdir/model.ckpt
+Restored from ./logdir/model.ckpt
+Restoring parameters from ./logdir/model.ckpt
+Restored from ./logdir/model.ckpt
