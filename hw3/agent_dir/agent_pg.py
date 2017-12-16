@@ -14,7 +14,7 @@ import random
 
 ImageSize = 80
 
-os.environ["CUDA_VISIBLE_DEVICES"]="6"
+# os.environ["CUDA_VISIBLE_DEVICES"]="6"
 class Agent_PG(Agent):
     def __init__(self, env, args):
         """
