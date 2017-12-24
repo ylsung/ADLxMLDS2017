@@ -164,7 +164,7 @@ Critic要minimize以下目標:
 \end{figure}
 \noindent
 我A3C model的設定跟pg幾乎一樣，只是拿掉了batch normalization(加了結果差不多)，並且用了16個actor來訓練，設定如Table \ref{table:3}所示。
-Figure \ref{fig:f12} 是我把a3c玩在pong上面的結果，可以發現的確比傳統的pg還要好，玩到400多場遊戲就可以突破10分(只不過若把所有actor加起來的話就算玩6400場了...)。只不過learning curve 看起來有點崎嶇，我想應該是我learning rate調太大和因為有16個不同的actor在訓練導致variance較大的緣故。
+Figure \ref{fig:f12} 是我把a3c玩在pong上面的結果，可以發現的確比傳統的pg還要好，玩到250多場遊戲就可以接近10分(即使算所有actor總共的episodes還是比pg好不少)。只不過learning curve 看起來比pg崎嶇，我想應該是我learning rate調太大和因為有16個不同的actor在訓練導致variance較大的緣故。
 
 \begin{table}[!htb]
 \centering
@@ -172,12 +172,12 @@ Figure \ref{fig:f12} 是我把a3c玩在pong上面的結果，可以發現的確�
 \hline
 {\textbf{total episode}} & {\textbf{num of actors}}\\
 \hline
-{425} & {16}\\
+{270} & {16}\\
 \hline
 \hline
 {\textbf{optimizer, learning rate}} & {\textbf{reward decay}} \\
 \hline
-{ADAM, $10^{-2}$} & {0.99}\\
+{ADAM, $10^{-3}$} & {0.99}\\
 \hline
 
 \end{tabular} 
@@ -187,8 +187,8 @@ Figure \ref{fig:f12} 是我把a3c玩在pong上面的結果，可以發現的確�
 
 \begin{figure}[!htb]
 \centering
-\includegraphics[scale=0.7]{a3c_avg_reward.png}
-\caption{a3c learning curve (playing Pong)}
+\includegraphics[scale=0.7]{pg_vs_a3c_avg_reward.png}
+\caption{a3c and pg learning curve (playing Pong)}
 \label{fig:f11}
 \end{figure}
 
