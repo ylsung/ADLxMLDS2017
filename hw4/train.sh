@@ -1,0 +1,1 @@
+python3.6 main.py --save 'binary_style_mask_aug' --load 'binary_style_mask' --model_id 500
