@@ -1,6 +1,5 @@
-from utils import SimpleDataset, np2Var, tensor2Var, create_fake_tags, plot, array_back_style
+from utils import SimpleDataset, np2Var, tensor2Var, create_fake_tags, array_back_style
 from model import Generator, Critic, Generator_img2img, Critic_img2img
-from model_another import G_net, D_net
 
 import os
 import random
@@ -342,8 +341,8 @@ def train(args, logger, tags_dict, mask_dict, id2style):
         C_list.append(C)
         epoch_list.append(epoch)
 
-        plot(epoch_list, W_list, 'epochs', 'Wasserstain Distance', w2epoch)
-        plot(epoch_list, C_list, 'epochs', 'Class loss', c2epoch)
+        # plot(epoch_list, W_list, 'epochs', 'Wasserstain Distance', w2epoch)
+        # plot(epoch_list, C_list, 'epochs', 'Class loss', c2epoch)
 
         if epoch % 50 == 0 and epoch != 0:
             netG_path = os.path.join(save_folder, 'netG_%d.pth' % epoch)

@@ -3,12 +3,13 @@ import numpy as np
 import logging
 import os
 import random
-from PIL import Image
+# from PIL import Image
+import skimage.io
 import scipy
 import scipy.ndimage
-import matplotlib
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
+# import matplotlib
+# matplotlib.use('agg')
+# import matplotlib.pyplot as plt
 
 from torch.utils.data import Dataset, DataLoader
 import torchvision as tv
@@ -50,10 +51,12 @@ class SimpleDataset(Dataset):
     def __getitem__(self, index):
         img_name = self.img_list[index]
         path = os.path.join(self.img_path, img_name)
-        img = Image.open(path)
-        img = img.convert('RGB')
+        img = skimage.io.imread(path)
+        # img = Image.open(path)
+        # img = img.convert('RGB')
 
         transform = transforms.Compose([
+            transforms.ToPILImage(),
             transforms.Scale((self.image_size, self.image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.Lambda(lambda data: np.asarray(data)),
@@ -103,12 +106,12 @@ def create_logger(save_path, file_type):
 
     return logger
 
-def plot(x, y, x_name, y_name, file_name):
-    plt.clf()
-    plt.plot(x, y)
-    plt.xlabel(x_name)
-    plt.ylabel(y_name)
-    plt.savefig(file_name, dpi=96)
+# def plot(x, y, x_name, y_name, file_name):
+#     plt.clf()
+#     plt.plot(x, y)
+#     plt.xlabel(x_name)
+#     plt.ylabel(y_name)
+#     plt.savefig(file_name, dpi=96)
 
 def load_tags(tags_name, style_dict):
     _id_list = []
