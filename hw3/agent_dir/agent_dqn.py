@@ -13,7 +13,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = '6'
+## os.environ["CUDA_VISIBLE_DEVICES"] = '6'
 
 ########### my argument #########
 # batch_size

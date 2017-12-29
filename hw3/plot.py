@@ -20,13 +20,17 @@ def plot_reward2game(file_names, names, name):
 
                 words = re.split(', | |: ', line.rstrip('\n'))
                 # print(words)
-                if words[0] == 'episode':
+                if words[0] == 'episode' or words[0] == 'game':
                     # game.append(int(words[1]))
                     # reward.append(float(words[7]))
-                    game.append(int(words[1]))
-                    reward.append(float(words[3]))
-        # game = game[:40000]
-        # reward = reward[:40000]
+                    if names[i] == 'a3c':
+                        game.append(int(words[1]))
+                        reward.append(float(words[3]))
+                    else:
+                        game.append(int(words[1]))
+                        reward.append(float(words[5]))
+        game = game[:270]
+        reward = reward[:270]
         # game = np.asarray(game)
         # reward = np.asarray(reward)
         # print(reward)
@@ -89,10 +93,12 @@ if __name__ == "__main__":
     # plot_reward2game(file_name_list, name_list, 'dqn')
 
     file_name_list = [
+    'ADLxMLDS2017_hw3_model/pg_batch1_rms1e-4/train_log.txt',
     'logdir/train_log.txt',
     ]
     name_list = [
+    'pg',
     'a3c',
     ]
 
-    plot_reward2game(file_name_list, name_list, 'a3c')
+    plot_reward2game(file_name_list, name_list, 'pg_vs_a3c')

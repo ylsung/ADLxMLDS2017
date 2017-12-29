@@ -194,7 +194,6 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-        self.first = 1
 
 
     def train(self):
@@ -224,9 +223,9 @@ class Agent_PG(Agent):
         ##################
         # YOUR CODE HERE #
         ##################
-
+    
         s = self.pipeline_fn(observation)
-        actions = self.get_actions(s, self.sess)
+        actions = self.get_actions([s], self.sess)
 
         return actions[0]
 
