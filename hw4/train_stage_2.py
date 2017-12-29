@@ -10,7 +10,7 @@ from torch.autograd import Variable, grad
 import torchvision as tv
 from torch.utils.data import Dataset, DataLoader
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+# os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 
 def calc_grad_penalty(args, net, real_data, fake_data, real_tags, fake_tags):
