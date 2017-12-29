@@ -1,5 +1,5 @@
 from utils import SimpleDataset, np2Var, tensor2Var, create_fake_tags, plot, array_back_style
-from model import Generator, Critic
+from model import Generator, Critic, Generator_img2img, Critic_img2img
 from model_another import G_net, D_net
 
 import os
@@ -93,7 +93,7 @@ def bce_loss(output, target, mask):
     return -(target * torch.log(output + 1e-8) * mask + \
         (1.0 - target) * torch.log(1.0 - output + 1e-8) * mask).sum(dim=1).mean()
 
-def train_C(args, data, tags, mask, netG, netC, optC):
+def train_C(args, data, tags, mask, netG_pre, netG, netC, optC):
 
     noise = torch.FloatTensor(data.size(0), args.nz, 1, 1).uniform_(0, args.noise_max)
 
@@ -108,7 +108,8 @@ def train_C(args, data, tags, mask, netG, netC, optC):
         fake_tags[i, eyes] = 1.0
     fake_tags_v = tensor2Var(fake_tags)
 
-    fake_data_v = tensor2Var(netG(noise_v, tags_v).data)
+    fake_data_v = netG_pre(noise_v, tags_v)
+    fake_data_v = Variable(netG(fake_data_v, tags_v).data)
 
     # real data with real tags
     real_real, real_real_class = netC(data_v, tags_v)
@@ -143,7 +144,7 @@ def train_C(args, data, tags, mask, netG, netC, optC):
 
     return (real - fake).cpu().data.numpy()[0], class_loss.cpu().data.numpy()[0]
 
-def train_G(args, data, tags, mask, netG, netC, optG):
+def train_G(args, data, tags, mask, netG_pre, netG, netC, optG):
     noise = torch.FloatTensor(data.size(0), args.nz, 1, 1).uniform_(0, args.noise_max)
 
     noise_v = tensor2Var(noise)
@@ -157,7 +158,9 @@ def train_G(args, data, tags, mask, netG, netC, optG):
 
     tags_v, mask_v = tensor2Var(tags), tensor2Var(mask)
 
-    fake_data_v = netG(noise_v, tags_v)
+    fake_data_v = Variable(netG_pre(noise_v, tags_v).data)
+
+    fake_data_v = netG(fake_data_v, tags_v)
 
     fake_real, fake_real_class = netC(fake_data_v, tags_v)
 
@@ -171,7 +174,7 @@ def train_G(args, data, tags, mask, netG, netC, optG):
     return (-loss).cpu().data.numpy()[0]
 
 
-def run_epoch(args, tr_loader, netG, netC, optG, optC):
+def run_epoch(args, tr_loader, netG_pre, netG, netC, optG, optC):
     # for i, (data, label) in enumerate(tr_loader):
     data_iter = iter(tr_loader)
     iteration = 0
@@ -187,7 +190,7 @@ def run_epoch(args, tr_loader, netG, netC, optG, optC):
         j = 0
         while iteration < len(data_iter) and j < 5:
             data, tags, mask = next(data_iter)
-            W, C = train_C(args, data, tags, mask, netG, netC, optC)
+            W, C = train_C(args, data, tags, mask, netG_pre, netG, netC, optC)
 
             # for p in netC.parameters():
             #     p.data.clamp_(-0.01, 0.01)
@@ -202,16 +205,11 @@ def run_epoch(args, tr_loader, netG, netC, optG, optC):
         for p in netC.parameters():
             p.requires_grad = False
 
-        F = train_G(args, data, tags, mask, netG, netC, optG)
+        F = train_G(args, data, tags, mask, netG_pre, netG, netC, optG)
     
     return W, C, F, data, tags.numpy(), mask.numpy()
 
 def train(args, logger, tags_dict, mask_dict, id2style):
-
-    transform = tv.transforms.Compose([
-        tv.transforms.Scale(args.image),
-        tv.transforms.ToTensor(),
-        ])
 
     # tr_dset = SimpleDataset(args.img_dir, tags_dict, mask_dict, transform)
     tr_dset = SimpleDataset(args.img_dir, tags_dict, mask_dict, args.image, args.degree)
@@ -225,14 +223,23 @@ def train(args, logger, tags_dict, mask_dict, id2style):
 
     # netG = G_net(args.nz, len(id2style))
     # netC = D_net(len(id2style))
-    netG = Generator(
+
+    netG_pre = Generator(
         nz=args.nz,
+        nc=args.nc,
+        ntext=len(id2style),
+        dim=64,
+        image_size=64
+        )
+
+    netG = Generator_img2img(
+        nz=args.nc,
         nc=args.nc,
         ntext=len(id2style),
         dim=64,
         image_size=args.image
         )
-    netC = Critic(
+    netC = Critic_img2img(
         nz=args.nz,
         nc=args.nc,
         ntext=len(id2style),
@@ -240,7 +247,16 @@ def train(args, logger, tags_dict, mask_dict, id2style):
         image_size=args.image
         )
     if torch.cuda.is_available():
+        netG_pre = netG_pre.cuda()
         netG, netC = netG.cuda(), netC.cuda()
+
+
+    netG_pre_path = 'ADLxMLDS_hw4_model/binary_style_mask_aug/netG_500.pth'
+    netG_pre.load_state_dict(torch.load(netG_pre_path, map_location=lambda storage, loc: storage))
+    for p in netG_pre.parameters():
+        p.requires_grad = False
+    netG_pre.eval()
+
 
     logger.info(netG)
     logger.info(netC)
@@ -284,12 +300,20 @@ def train(args, logger, tags_dict, mask_dict, id2style):
 
     print_ground_truth = 1
 
+    transform = tv.transforms.Compose([
+        tv.transforms.ToPILImage(),
+        tv.transforms.Scale(64),
+        tv.transforms.ToTensor(),
+        ])
+
     for epoch in range(args.max_epoch  + 1):
-        W, C, _, real_data, real_tags, real_mask = run_epoch(args, tr_loader, netG, netC, optG, optC)
+        W, C, _, real_data, real_tags, real_mask = run_epoch(args, tr_loader, netG_pre, 
+            netG, netC, optG, optC)
 
         logger.info('epoch: %d, Wasserstain Dist: %.4f, Class loss: %.4f' % (epoch, W, C))
 
-        fake_data_v = netG(noise_v, fake_tags_v)
+        fake_data_v = netG_pre(noise_v, fake_tags_v)
+        fake_data_v = netG(fake_data_v, fake_tags_v)
 
         if print_ground_truth:
             choose = random.randint(0, real_tags.shape[0] - sample_size)
@@ -306,8 +330,13 @@ def train(args, logger, tags_dict, mask_dict, id2style):
             img_path = os.path.join(save_folder, 'real.png')
             tv.utils.save_image(real_data, img_path, nrow=4)
 
+        img_list = []
+        for i in range(fake_data_v.size(0)):
+            img_list.append(transform(fake_data_v.cpu().data[i]))
+        img_data = torch.stack(img_list)
+
         img_path = os.path.join(save_folder, 'fake_%d.png' % epoch)
-        tv.utils.save_image(fake_data_v.data, img_path, nrow=4)
+        tv.utils.save_image(img_data, img_path, nrow=4)
 
         W_list.append(W)
         C_list.append(C)
@@ -324,36 +353,39 @@ def train(args, logger, tags_dict, mask_dict, id2style):
             torch.save(netC.state_dict(), netC_path)
 
 def test(args, logger, _id, _tags, id2style):
-    netG = Generator(
+    netG_pre = Generator(
         nz=args.nz,
+        nc=args.nc,
+        ntext=len(id2style),
+        dim=64,
+        image_size=64
+        )
+    netG = Generator_img2img(
+        nz=args.nc,
         nc=args.nc,
         ntext=len(id2style),
         dim=64,
         image_size=args.image
         )
-    netC = Critic(
-        nz=args.nz,
-        nc=args.nc,
-        ntext=len(id2style),
-        dim=64,
-        image_size=args.image
-        )
+
     if torch.cuda.is_available():
-        netG, netC = netG.cuda(), netC.cuda()
+        netG = netG.cuda()
+        netG_pre = netG_pre.cuda()
 
+    logger.info(netG_pre)
     logger.info(netG)
-    logger.info(netC)
 
+    netG_pre_path = 'ADLxMLDS_hw4_model/binary_style_mask_aug/netG_500.pth'
     load_folder = os.path.join(args.root, args.load)
 
     if args.load != '':
         netG_path = os.path.join(load_folder, 'netG_%d.pth' % args.model_id)
-        netC_path = os.path.join(load_folder, 'netC_%d.pth' % args.model_id)
+        
         netG.load_state_dict(torch.load(netG_path, map_location=lambda storage, loc: storage))
-        netC.load_state_dict(torch.load(netC_path, map_location=lambda storage, loc: storage))
+        netG_pre.load_state_dict(torch.load(netG_pre_path, map_location=lambda storage, loc: storage))
 
         logger.info('load from: %s success!!!!!!!!!!!!!' % netG_path)
-        logger.info('load from: %s success!!!!!!!!!!!!!' % netC_path)
+        logger.info('load from: %s success!!!!!!!!!!!!!' % netG_pre_path)
     else:
         logger.info('please load a model!!!!!')
         exit()
@@ -366,7 +398,14 @@ def test(args, logger, _id, _tags, id2style):
     if not os.path.exists(img_dir):
         os.mkdir(img_dir)
 
+
+    transform = tv.transforms.Compose([
+        tv.transforms.ToPILImage(),
+        tv.transforms.Scale(64),
+        tv.transforms.ToTensor(),
+        ])
     netG.eval()
+    netG_pre.eval()
     while i * args.batch < _tags.shape[0]:
         ba_tags = _tags[i*args.batch: (i+1)*args.batch]
         ba_id = _id[i*args.batch: (i+1)*args.batch]
@@ -378,15 +417,18 @@ def test(args, logger, _id, _tags, id2style):
 
             noise_v = tensor2Var(noise, volatile=True)
 
-            fake_img = netG(noise_v, ba_tags_v).cpu().data
+            fake_img = netG_pre(noise_v, ba_tags_v)
+            fake_img = netG(fake_img, ba_tags_v).cpu().data
+
+            # fake_img = transform(fake_img[0])
 
             # img_list.append(fake_img)
             for j in range(ba_tags.shape[0]):
                 img = fake_img[j]
+                img = transform(img)
                 img_name = os.path.join(img_dir, 'sample_%s_%d.jpg' % (ba_id[j], s))
                 tv.utils.save_image(img, img_name)
-
-        # img = torch.cat((img_list))
+        # img = torch.stack((img_list))
         # img_name = os.path.join(img_dir, 'sample_%d.jpg' % i)
         # tv.utils.save_image(img, img_name)
 

@@ -54,7 +54,7 @@ class SimpleDataset(Dataset):
         img = img.convert('RGB')
 
         transform = transforms.Compose([
-            transforms.Scale(self.image_size),
+            transforms.Scale((self.image_size, self.image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.Lambda(lambda data: np.asarray(data)),
             transforms.Lambda(lambda data: scipy.ndimage.rotate(data, random.uniform(-self.degree, self.degree), 
