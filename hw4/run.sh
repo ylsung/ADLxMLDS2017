@@ -1,3 +1,5 @@
+#!/bin/bash
+git clone https://gitlab.com/louis2889184/ADLxMLDS_hw4_model.git
 # python3.6 main.py --todo 'test' --load 'binary_style_mask_aug' --model_id 500 \
 # --img_save 'sample' --te_data 'data/sample_testing_text.txt' \
 
