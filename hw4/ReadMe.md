@@ -24,7 +24,7 @@ torchvision <br/>
 scipy == 1.0.0 <br/>
 scikit-image == 0.13.1 <br/>
 
-OS == Linux syste (Ubuntu, Arch Linux)
+OS == Linux system (Ubuntu 14.04LTS)
 
 ## **Execution**
 
